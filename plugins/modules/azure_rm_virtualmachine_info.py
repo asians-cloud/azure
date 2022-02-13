@@ -136,6 +136,12 @@ vms:
                     returned: always
                     type: str
                     sample: Standard_LRS
+                managed_disk_id:
+                    description:
+                        - Managed data disk ID.
+                    returned: always
+                    type: str
+                    sample: /subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroups/myResourceGroup/Microsoft.Compute/disks/diskName
         id:
             description:
                 - Resource ID.
@@ -198,6 +204,12 @@ vms:
             sample: [
                 "myNetworkInterface"
             ]
+        proximityPlacementGroup:
+            description:
+                - The name or ID of the proximity placement group the VM should be associated with.
+            type: dict
+            returned: always
+            sample: { "id": "/subscriptions/xxx/resourceGroups/xxx/providers/Microsoft.Compute/proximityPlacementGroups/testid13"}
         os_disk_caching:
             description:
                 - Type of OS disk caching.
@@ -408,6 +420,7 @@ class AzureRMVirtualMachineInfo(AzureRMModuleBase):
         new_result['state'] = 'present'
         new_result['location'] = vm.location
         new_result['vm_size'] = result['properties']['hardwareProfile']['vmSize']
+        new_result['proximityPlacementGroup'] = result['properties'].get('proximityPlacementGroup')
         new_result['zones'] = result.get('zones', None)
         os_profile = result['properties'].get('osProfile')
         if os_profile is not None:
@@ -455,6 +468,7 @@ class AzureRMVirtualMachineInfo(AzureRMModuleBase):
                 'name': disks[disk_index].get('name'),
                 'disk_size_gb': disks[disk_index].get('diskSizeGB'),
                 'managed_disk_type': disks[disk_index].get('managedDisk', {}).get('storageAccountType'),
+                'managed_disk_id': disks[disk_index].get('managedDisk', {}).get('id'),
                 'caching': disks[disk_index].get('caching')
             })
 
