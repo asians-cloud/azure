@@ -5,6 +5,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
+from more_itertools import unique_everseen
 __metaclass__ = type
 
 
@@ -846,6 +847,9 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
                 disable_outbound_snat=item.get('disable_outbound_snat')
             ) for item in self.load_balancing_rules] if self.load_balancing_rules else None
 
+            if load_balancer:
+                load_balancing_rules_param = self.join_load_balancing_rule(load_balancing_rules_param, getattr(load_balancer, 'load_balancing_rules'))
+
             inbound_nat_rules_param = [self.network_models.InboundNatRule(
                 name=item.get('name'),
                 frontend_ip_configuration=self.network_models.SubResource(
@@ -943,6 +947,10 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
             return new_lb
         except CloudError as exc:
             self.fail("Error creating or updating load balancer {0} - {1}".format(self.name, str(exc)))
+
+    def join_load_balancing_rule(self, new_list, old_list):
+        result = new_list + old_list
+        return list(unique_everseen(result))
 
     def object_assign(self, patch, origin):
         attribute_map = set(self.network_models.LoadBalancer._attribute_map.keys()) - set(self.network_models.LoadBalancer._validation.keys())
