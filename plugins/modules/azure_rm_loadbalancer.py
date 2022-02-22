@@ -946,7 +946,7 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
             new_lb = self.get_poller_result(poller)
             return new_lb
         except CloudError as exc:
-            if "the same name" in str(exec):
+            if "the same name" in str(exc):
                 return param
             self.fail("Error creating or updating load balancer {0} - {1}".format(self.name, str(exc)))
 
