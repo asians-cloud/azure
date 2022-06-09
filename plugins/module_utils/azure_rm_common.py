@@ -225,20 +225,20 @@ except ImportError:
     HAS_MSRESTAZURE = False
 
 try:
-    from enum import Enum
+        from enum import Enum
     from msrestazure.azure_active_directory import AADTokenCredentials
     from msrestazure.azure_exceptions import CloudError
     from msrestazure.azure_active_directory import MSIAuthentication
     from msrestazure.tools import parse_resource_id, resource_id, is_valid_resource_id
     from msrestazure import azure_cloud
     from azure.common.credentials import ServicePrincipalCredentials, UserPassCredentials
-    from azure.mgmt.monitor.version import VERSION as monitor_client_version
-    from azure.mgmt.network.version import VERSION as network_client_version
-    from azure.mgmt.storage.version import VERSION as storage_client_version
-    from azure.mgmt.compute.version import VERSION as compute_client_version
-    from azure.mgmt.resource.version import VERSION as resource_client_version
-    from azure.mgmt.dns.version import VERSION as dns_client_version
-    from azure.mgmt.web.version import VERSION as web_client_version
+    from azure.mgmt.monitor._version import VERSION as monitor_client_version
+    from azure.mgmt.network._version import VERSION as network_client_version
+    from azure.mgmt.storage._version import VERSION as storage_client_version
+    from azure.mgmt.compute._version import VERSION as compute_client_version
+    from azure.mgmt.resource._version import VERSION as resource_client_version
+    from azure.mgmt.dns._version import VERSION as dns_client_version
+    from azure.mgmt.web._version import VERSION as web_client_version
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.resource.resources import ResourceManagementClient
     from azure.mgmt.managementgroups import ManagementGroupsAPI as ManagementGroupsClient
@@ -254,7 +254,8 @@ try:
     from azure.mgmt.marketplaceordering import MarketplaceOrderingAgreements
     from azure.mgmt.trafficmanager import TrafficManagerManagementClient
     from azure.storage.cloudstorageaccount import CloudStorageAccount
-    from azure.storage.blob import PageBlobService, BlockBlobService
+    from azure.storage.blob.pageblobservice import PageBlobService
+    from azure.storage.blob.blockblobservice import BlockBlobService
     from adal.authentication_context import AuthenticationContext
     from azure.mgmt.authorization import AuthorizationManagementClient
     from azure.mgmt.sql import SqlManagementClient
@@ -275,8 +276,8 @@ try:
     from msrestazure import AzureConfiguration
     from msrest.authentication import Authentication
     from azure.mgmt.resource.locks import ManagementLockClient
-    from azure.mgmt.recoveryservicesbackup import RecoveryServicesBackupClient
-    import azure.mgmt.recoveryservicesbackup.models as RecoveryServicesBackupModels
+    from azure.mgmt.recoveryservicesbackup.activestamp import RecoveryServicesBackupClient
+    import azure.mgmt.recoveryservicesbackup.activestamp.models as RecoveryServicesBackupModels
     from azure.mgmt.search import SearchManagementClient
     from azure.mgmt.datalake.store import DataLakeStoreAccountManagementClient
     import azure.mgmt.datalake.store.models as DataLakeStoreAccountModel
