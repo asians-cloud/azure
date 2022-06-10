@@ -283,6 +283,7 @@ try:
     import azure.mgmt.datalake.store.models as DataLakeStoreAccountModel
     from azure.mgmt.notificationhubs import NotificationHubsManagementClient
     from azure.mgmt.eventhub import EventHubManagementClient
+    from azure.identity._credentials import client_secret, user_password
 
 except ImportError as exc:
     Authentication = object
@@ -1487,6 +1488,7 @@ class AzureRMAuth(object):
         if self.credentials.get('credentials') is not None:
             # AzureCLI credentials
             self.azure_credentials = self.credentials['credentials']
+            self.azure_credential_track2 = self.credentials['credential']
         elif self.credentials.get('client_id') is not None and \
                 self.credentials.get('secret') is not None and \
                 self.credentials.get('tenant') is not None:
@@ -1499,6 +1501,9 @@ class AzureRMAuth(object):
                                                                  cloud_environment=self._cloud_environment,
                                                                  resource=graph_resource if self.is_ad_resource else rm_resource,
                                                                  verify=self._cert_validation_mode == 'validate')
+            self.azure_credential_track2 = client_secret.ClientSecretCredential(client_id=self.credentials['client_id'],
+                                                                                client_secret=self.credentials['secret'],
+                                                                                tenant_id=self.credentials['tenant'])
 
         elif self.credentials.get('ad_user') is not None and \
                 self.credentials.get('password') is not None and \
@@ -1523,6 +1528,10 @@ class AzureRMAuth(object):
                                                          tenant=tenant,
                                                          cloud_environment=self._cloud_environment,
                                                          verify=self._cert_validation_mode == 'validate')
+            self.azure_credential_track2 = user_password.UsernamePasswordCredential(username=self.credentials['ad_user'],
+                                                                                    password=self.credentials['password'],
+                                                                                    tenant_id=self.credentials.get('tenant', 'organizations'),
+                                                                                    client_id=client_id)
         else:
             self.fail("Failed to authenticate with provided credentials. Some attributes were missing. "
                       "Credentials must include client_id, secret and tenant or ad_user and password, or "
