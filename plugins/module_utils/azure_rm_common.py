@@ -876,7 +876,7 @@ class AzureRMModuleBase(object):
 
         return client
 
-    def get_mgmt_svc_client(self, client_type, base_url=None, api_version=None, suppress_subscription_id=False):
+    def get_mgmt_svc_client(self, client_type, base_url=None, api_version=None, suppress_subscription_id=False, is_track2=False):
         self.log('Getting management service client {0}'.format(client_type.__name__))
         self.check_client_version(client_type)
 
@@ -888,18 +888,15 @@ class AzureRMModuleBase(object):
 
         # Some management clients do not take a subscription ID as parameters.
         if suppress_subscription_id:
-            client_kwargs = dict(
-                credentials=self.azure_auth.azure_credentials, 
-                credential=self.azure_auth.azure_credentials, base_url=base_url
-            )
+            if is_track2:
+                client_kwargs = dict(credential=self.azure_auth.azure_credential_track2, base_url=base_url)
+            else:
+                client_kwargs = dict(credentials=self.azure_auth.azure_credentials, base_url=base_url)
         else:
-            client_kwargs = dict(
-                credentials=self.azure_auth.azure_credentials, 
-                credential=self.azure_auth.azure_credentials,
-                subscription_id=self.azure_auth.subscription_id, 
-                base_url=base_url
-            )
-
+            if is_track2:
+                client_kwargs = dict(credential=self.azure_auth.azure_credential_track2, subscription_id=mgmt_subscription_id, base_url=base_url)
+            else:
+                client_kwargs = dict(credentials=self.azure_auth.azure_credentials, subscription_id=mgmt_subscription_id, base_url=base_url)
         api_profile_dict = {}
 
         if self.api_profile:
@@ -931,8 +928,9 @@ class AzureRMModuleBase(object):
 
             setattr(client, '_ansible_models', importlib.import_module(client_type.__module__).models)
             client.models = types.MethodType(_ansible_get_models, client)
-
-        client.config = self.add_user_agent(client.config)
+        
+        if not is_track2:
+            client.config = self.add_user_agent(client.config)
 
         if self.azure_auth._cert_validation_mode == 'ignore':
             client.config.session_configuration_callback = self._validation_ignore_callback
@@ -1002,6 +1000,7 @@ class AzureRMModuleBase(object):
         if not self._storage_client:
             self._storage_client = self.get_mgmt_svc_client(StorageManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
+                                                            is_track2=True,
                                                             api_version='2019-06-01')
         return self._storage_client
 
@@ -1052,6 +1051,7 @@ class AzureRMModuleBase(object):
         if not self._network_client:
             self._network_client = self.get_mgmt_svc_client(NetworkManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
+                                                            is_track2=True,
                                                             api_version='2020-06-01')
         return self._network_client
 
@@ -1080,6 +1080,7 @@ class AzureRMModuleBase(object):
         if not self._image_client:
             self._image_client = self.get_mgmt_svc_client(ComputeManagementClient,
                                                           base_url=self._cloud_environment.endpoints.resource_manager,
+                                                          is_track2=True,
                                                           api_version='2018-06-01')
         return self._image_client
 
@@ -1094,6 +1095,7 @@ class AzureRMModuleBase(object):
         if not self._compute_client:
             self._compute_client = self.get_mgmt_svc_client(ComputeManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
+                                                            is_track2=True,
                                                             api_version='2019-07-01')
         return self._compute_client
 
@@ -1167,7 +1169,9 @@ class AzureRMModuleBase(object):
         self.log('Getting SQL client')
         if not self._sql_client:
             self._sql_client = self.get_mgmt_svc_client(SqlManagementClient,
-                                                        base_url=self._cloud_environment.endpoints.resource_manager)
+                                                        base_url=self._cloud_environment.endpoints.resource_manager,
+                                                        is_track2=True
+            )
         return self._sql_client
 
     @property
@@ -1208,6 +1212,7 @@ class AzureRMModuleBase(object):
         if not self._containerregistry_client:
             self._containerregistry_client = self.get_mgmt_svc_client(ContainerRegistryManagementClient,
                                                                       base_url=self._cloud_environment.endpoints.resource_manager,
+                                                                      is_track2=True,
                                                                       api_version='2017-10-01')
 
         return self._containerregistry_client
@@ -1276,7 +1281,9 @@ class AzureRMModuleBase(object):
         self.log('Getting automation client')
         if not self._automation_client:
             self._automation_client = self.get_mgmt_svc_client(AutomationClient,
-                                                               base_url=self._cloud_environment.endpoints.resource_manager)
+                                                               base_url=self._cloud_environment.endpoints.resource_manager,
+                                                               is_track2=True
+            )
         return self._automation_client
 
     @property
