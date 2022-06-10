@@ -225,7 +225,7 @@ except ImportError:
     HAS_MSRESTAZURE = False
 
 try:
-        from enum import Enum
+    from enum import Enum
     from msrestazure.azure_active_directory import AADTokenCredentials
     from msrestazure.azure_exceptions import CloudError
     from msrestazure.azure_active_directory import MSIAuthentication
