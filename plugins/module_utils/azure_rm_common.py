@@ -887,6 +887,10 @@ class AzureRMModuleBase(object):
             # most things are resource_manager, don't make everyone specify
             base_url = self.azure_auth._cloud_environment.endpoints.resource_manager
 
+        mgmt_subscription_id = self.azure_auth.subscription_id
+        if self.module.params.get('subscription_id'):
+            mgmt_subscription_id = self.module.params.get('subscription_id')
+
         # Some management clients do not take a subscription ID as parameters.
         if suppress_subscription_id:
             if is_track2:
