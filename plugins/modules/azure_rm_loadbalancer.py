@@ -944,12 +944,7 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
             else:
                 # Append new loadbalancer rules
                 if type(getattr(origin, key)) == list:
-                    result = getattr(origin, key)
-                    for org in getattr(origin, key):
-                        for ptch in getattr(patch, key):
-                            if org.name != ptch.name:
-                                result.append(ptch)
-                    setattr(patch, key, result)
+                    setattr(patch, key, getattr(origin, key) + getattr(patch, key))
                     
         return patch
 
