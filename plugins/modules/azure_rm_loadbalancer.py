@@ -5,6 +5,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
+from more_itertools import unique_everseen
 __metaclass__ = type
 
 
@@ -207,6 +208,9 @@ options:
             enable_floating_ip:
                 description:
                     - Configures a virtual machine's endpoint for the floating IP capability required to configure a SQL AlwaysOn Availability Group.
+            disable_outbound_snat:
+                description:
+                    - Configures outbound rules to provide backend pool members access to the internet.
     inbound_nat_rules:
         description:
             - Collection of inbound NAT Rules used by a load balancer.
@@ -558,6 +562,9 @@ load_balancing_rule_spec = dict(
     ),
     enable_floating_ip=dict(
         type='bool'
+    ),
+    disable_outbound_snat=dict(
+        type='bool'
     )
 )
 
@@ -765,7 +772,8 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
                     frontend_port=self.frontend_port,
                     backend_port=self.backend_port,
                     idle_timeout=self.idle_timeout,
-                    enable_floating_ip=False
+                    enable_floating_ip=False,
+                    disable_outbound_snat=True
                 )] if self.protocol else None
 
             # create new load balancer structure early, so it can be easily compared
@@ -835,8 +843,12 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
                 frontend_port=item.get('frontend_port'),
                 backend_port=item.get('backend_port'),
                 idle_timeout_in_minutes=item.get('idle_timeout'),
-                enable_floating_ip=item.get('enable_floating_ip')
+                enable_floating_ip=item.get('enable_floating_ip'),
+                disable_outbound_snat=item.get('disable_outbound_snat')
             ) for item in self.load_balancing_rules] if self.load_balancing_rules else None
+
+            if load_balancer:
+                load_balancing_rules_param = self.join_load_balancing_rule(load_balancing_rules_param, getattr(load_balancer, 'load_balancing_rules'))
 
             inbound_nat_rules_param = [self.network_models.InboundNatRule(
                 name=item.get('name'),
@@ -934,7 +946,13 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
             new_lb = self.get_poller_result(poller)
             return new_lb
         except CloudError as exc:
+            if "the same name" in str(exc):
+                return param
             self.fail("Error creating or updating load balancer {0} - {1}".format(self.name, str(exc)))
+
+    def join_load_balancing_rule(self, new_list, old_list):
+        result = new_list + old_list
+        return list(unique_everseen(result))
 
     def object_assign(self, patch, origin):
         attribute_map = set(self.network_models.LoadBalancer._attribute_map.keys()) - set(self.network_models.LoadBalancer._validation.keys())
