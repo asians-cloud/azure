@@ -248,7 +248,8 @@ try:
     from azure.mgmt.marketplaceordering import MarketplaceOrderingAgreements
     from azure.mgmt.trafficmanager import TrafficManagerManagementClient
     from azure.storage.cloudstorageaccount import CloudStorageAccount
-    from azure.storage.blob import PageBlobService, BlockBlobService
+    from azure.storage.blob.pageblobservice import PageBlobService
+    from azure.storage.blob.blockblobservice import BlockBlobService
     from adal.authentication_context import AuthenticationContext
     from azure.mgmt.authorization import AuthorizationManagementClient
     from azure.mgmt.sql import SqlManagementClient
@@ -269,8 +270,8 @@ try:
     from msrestazure import AzureConfiguration
     from msrest.authentication import Authentication
     from azure.mgmt.resource.locks import ManagementLockClient
-    from azure.mgmt.recoveryservicesbackup import RecoveryServicesBackupClient
-    import azure.mgmt.recoveryservicesbackup.models as RecoveryServicesBackupModels
+    from azure.mgmt.recoveryservicesbackup.activestamp import RecoveryServicesBackupClient
+    import azure.mgmt.recoveryservicesbackup.activestamp.models as RecoveryServicesBackupModels
     from azure.mgmt.search import SearchManagementClient
     from azure.mgmt.datalake.store import DataLakeStoreAccountManagementClient
     import azure.mgmt.datalake.store.models as DataLakeStoreAccountModel
@@ -900,7 +901,6 @@ class AzureRMModuleBase(object):
                 client_kwargs = dict(credential=self.azure_auth.azure_credential_track2, subscription_id=mgmt_subscription_id, base_url=base_url)
             else:
                 client_kwargs = dict(credentials=self.azure_auth.azure_credentials, subscription_id=mgmt_subscription_id, base_url=base_url)
-
         api_profile_dict = {}
 
         if self.api_profile:
@@ -932,7 +932,6 @@ class AzureRMModuleBase(object):
 
             setattr(client, '_ansible_models', importlib.import_module(client_type.__module__).models)
             client.models = types.MethodType(_ansible_get_models, client)
-
         if not is_track2:
             client.config = self.add_user_agent(client.config)
 
@@ -1070,6 +1069,7 @@ class AzureRMModuleBase(object):
         if not self._resource_client:
             self._resource_client = self.get_mgmt_svc_client(ResourceManagementClient,
                                                              base_url=self._cloud_environment.endpoints.resource_manager,
+                                                             is_track2=True,
                                                              api_version='2017-05-10')
         return self._resource_client
 
@@ -1101,6 +1101,7 @@ class AzureRMModuleBase(object):
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
                                                             is_track2=True,
                                                             api_version='2021-04-01')
+
         return self._compute_client
 
     @property
@@ -1207,6 +1208,7 @@ class AzureRMModuleBase(object):
         if not self._containerregistry_client:
             self._containerregistry_client = self.get_mgmt_svc_client(ContainerRegistryManagementClient,
                                                                       base_url=self._cloud_environment.endpoints.resource_manager,
+                                                                      is_track2=True,
                                                                       api_version='2017-10-01')
 
         return self._containerregistry_client
@@ -1299,6 +1301,7 @@ class AzureRMModuleBase(object):
             self._automation_client = self.get_mgmt_svc_client(AutomationClient,
                                                                base_url=self._cloud_environment.endpoints.resource_manager,
                                                                is_track2=True)
+
         return self._automation_client
 
     @property
@@ -1508,6 +1511,7 @@ class AzureRMAuth(object):
             # AzureCLI credentials
             self.azure_credentials = self.credentials['credentials']
             self.azure_credential_track2 = self.credentials['credentials']
+
         elif self.credentials.get('client_id') is not None and \
                 self.credentials.get('secret') is not None and \
                 self.credentials.get('tenant') is not None:
@@ -1523,7 +1527,6 @@ class AzureRMAuth(object):
             self.azure_credential_track2 = client_secret.ClientSecretCredential(client_id=self.credentials['client_id'],
                                                                                 client_secret=self.credentials['secret'],
                                                                                 tenant_id=self.credentials['tenant'])
-
         elif self.credentials.get('ad_user') is not None and self.credentials.get('password') is not None:
             tenant = self.credentials.get('tenant')
             if not tenant:

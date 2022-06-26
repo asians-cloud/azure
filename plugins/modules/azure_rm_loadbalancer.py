@@ -995,6 +995,11 @@ class AzureRMLoadBalancer(AzureRMModuleBase):
         for key in attribute_map:
             if not getattr(patch, key):
                 setattr(patch, key, getattr(origin, key))
+            else:
+                # Append new loadbalancer rules
+                if type(getattr(origin, key)) == list:
+                    setattr(patch, key, getattr(origin, key) + getattr(patch, key))
+                    
         return patch
 
     def assign_protocol(self, patch, origin):

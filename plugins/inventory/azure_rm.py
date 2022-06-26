@@ -17,6 +17,7 @@ DOCUMENTATION = r'''
       - azure.azcollection.azure_rm
       - inventory_cache
       - constructed
+      - inventory_cache
     description:
         - Query VM details from Azure Resource Manager
         - Requires a YAML configuration file whose name ends with 'azure_rm.(yml|yaml)'
@@ -119,7 +120,7 @@ import hashlib
 import json
 import re
 import uuid
-
+import os
 try:
     from queue import Queue, Empty
 except ImportError:
@@ -133,6 +134,8 @@ from ansible_collections.azure.azcollection.plugins.module_utils.azure_rm_common
 from ansible.errors import AnsibleParserError, AnsibleError
 from ansible.module_utils.parsing.convert_bool import boolean
 from ansible.module_utils._text import to_native, to_bytes, to_text
+from ansible.utils.display import Display
+
 from itertools import chain
 
 try:
@@ -149,6 +152,7 @@ except ImportError:
     Deserializer = object
     pass
 
+display = Display()
 
 class AzureRMRestConfiguration(AzureConfiguration):
     def __init__(self, credentials, subscription_id, base_url=None):
@@ -277,6 +281,15 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         url = url.format(subscriptionId=self._clientconfig.subscription_id, rg=rg)
         self._enqueue_get(url=url, api_version=self._compute_api_version, handler=self._on_vmss_page_response)
 
+    def fetch_from_az(self):
+        self._credential_setup()
+        for vm_rg in self.get_option('include_vm_resource_groups'):
+            self._enqueue_vm_list(vm_rg)
+
+        for vmss_rg in self.get_option('include_vmss_resource_groups'):
+            self._enqueue_vmss_list(vmss_rg)
+
+
     def _get_hosts(self, path, cache):
         # Cache logic
         if cache:
@@ -284,7 +297,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             cache_key = self.get_cache_key(path)
         else:
             cache_key = None
-
+            
         cache_needs_update = False
         if cache:
             try:
@@ -321,6 +334,56 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             self._cache[cache_key] = cached_data
             display.vvvv("save cache")
 
+    def _get_hosts(self, path, cache):
+        cache_force_update = os.environ.get("FORCE_UPDATE_CACHE", False)
+        if cache and cache_force_update:
+            cache = False
+            cache_key = self.get_cache_key(path)
+        elif cache:
+            cache = self.get_option("cache")
+            cache_key = self.get_cache_key(path)
+        else:
+            cache_key = None
+
+        cache_needs_update = False
+        if cache:
+            try:
+                results = self._cache[cache_key]
+                for h in results:
+                    ah = AzureHost(h['vm_model'], self, vmss=h['vmss'], legacy_name=self._legacy_hostnames, powerstate=h['powerstate'], nics=h['nics'])
+                    self._hosts.append(ah)
+            except KeyError:
+                cache_needs_update = True
+
+        if not cache or cache_needs_update:
+            self.fetch_from_az()
+            # for vm_rg in self.get_option('include_vm_resource_groups'):
+            #     self._enqueue_vm_list(vm_rg)
+
+            # for vmss_rg in self.get_option('include_vmss_resource_groups'):
+            #     self._enqueue_vmss_list(vmss_rg)
+
+            # if self._batch_fetch:
+            #     self._process_queue_batch()
+            # else:
+            #     self._process_queue_serial()
+        else:
+            display.vvvv("use cache")
+
+        if cache_needs_update:
+            cached_data = []
+            for h in self._hosts:
+                cached_data.append({
+                    'vm_model': h._vm_model,
+                    'vmss': h._vmss,
+                    'powerstate': h._powerstate,
+                    #{ k: v for k,v in a.items() }
+                    'nics': [{'nic_model': n._nic_model, 'is_primary': n.is_primary, 'public_ips': { k: { "pip_model": v._pip_model} for k, v in n.public_ips.items() } } for n in h.nics]
+                })
+                #self.public_ips[pip_model['id']] = AzurePip(pip_model)
+            self._cache[cache_key] = cached_data
+            display.vvvv("save cache")
+            
         constructable_config_strict = boolean(self.get_option('fail_on_template_errors'))
         constructable_config_compose = self.get_option('hostvar_expressions')
         constructable_config_groups = self.get_option('conditional_groups')
@@ -532,26 +595,32 @@ class AzureHost(object):
             self.default_inventory_hostname = '{0}_{1}'.format(vm_model['name'], hashlib.sha1(to_bytes(vm_model['id'])).hexdigest()[0:4])
 
         self._hostvars = {}
-
         if powerstate == None:
+            #  if vmss:
+                #  display.vvvv("ID : " + vm_model['id'])
+                #  inventory_client._enqueue_get(url=vm_model['id'],
+                                          #  api_version='2021-07-01',
+                                          #  handler=self._on_virtualview_response)
+            #  else:
             inventory_client._enqueue_get(url="{0}/instanceView".format(vm_model['id']),
-                                        api_version=self._inventory_client._compute_api_version,
-                                        handler=self._on_instanceview_response)
+                                      api_version=self._inventory_client._compute_api_version,
+                                      handler=self._on_instanceview_response)
         else:
             self._powerstate = powerstate
 
         if nics:
             for n in nics:
-                nic = AzureNic(nic_model=n['nic_model'], inventory_client=self, is_primary=n['is_primary'])
+                nic = AzureNic(nic_model=n['nic_model'], inventory_client=inventory_client, is_primary=n['is_primary'], public_ips=n['public_ips'])
+
                 self.nics.append(nic)
         else:
             nic_refs = vm_model['properties']['networkProfile']['networkInterfaces']
             for nic in nic_refs:
                 # single-nic instances don't set primary, so figure it out...
-                is_primary = nic.get('properties', {}).get('primary', len(nic_refs) == 1)
+                is_primary = nic.get('properties', {}).get('primary', len(nic_refs) == 1) 
                 inventory_client._enqueue_get(url=nic['id'], api_version=self._inventory_client._network_api_version,
-                                              handler=self._on_nic_response,
-                                              handler_args=dict(is_primary=is_primary))
+                                          handler=self._on_nic_response,
+                                          handler_args=dict(is_primary=is_primary))
 
     @property
     def hostvars(self):
@@ -609,15 +678,34 @@ class AzureHost(object):
         # set nic-related values from the primary NIC first
         for nic in sorted(self.nics, key=lambda n: n.is_primary, reverse=True):
             # and from the primary IP config per NIC first
+            if self._vmss:
+                nic_model = nic._nic_model
+                pip_id = f"{nic_model['id']}/ipConfigurations/{nic_model['name']}-defaultIpConfiguration/publicIPAddresses/publicIp-{nic_model['name']}"
+                new_hostvars['public_ip_id'] = pip_id 
+                pip = nic.public_ips[pip_id]
+                if isinstance(pip, dict) and 'pip_model' in pip:
+                    pip = AzurePip(pip['pip_model'])
+                
+                new_hostvars['public_ip_name'] = pip._pip_model['name']
+                new_hostvars['public_ipv4_addresses'].append(pip._pip_model['properties'].get('ipAddress', None))
+                pip_fqdn = pip._pip_model['properties'].get('dnsSettings', {}).get('fqdn')
+                if pip_fqdn:
+                    new_hostvars['public_dns_hostnames'].append(pip_fqdn)
+
+                continue
+
             for ipc in sorted(nic._nic_model['properties']['ipConfigurations'], key=lambda i: i['properties'].get('primary', False), reverse=True):
-                private_ip = ipc['properties'].get('privateIPAddress')
-                if private_ip:
-                    new_hostvars['private_ipv4_addresses'].append(private_ip)
+                #  private_ip = ipc['properties'].get('privateIPAddress')
+                #  if private_ip:
+                    #  new_hostvars['private_ipv4_addresses'].append(private_ip)
                 pip_id = ipc['properties'].get('publicIPAddress', {}).get('id')
                 if pip_id:
                     new_hostvars['public_ip_id'] = pip_id
 
                     pip = nic.public_ips[pip_id]
+                    if isinstance(pip, dict) and 'pip_model' in pip:
+                        pip = AzurePip(pip['pip_model'])
+
                     new_hostvars['public_ip_name'] = pip._pip_model['name']
                     new_hostvars['public_ipv4_addresses'].append(pip._pip_model['properties'].get('ipAddress', None))
                     pip_fqdn = pip._pip_model['properties'].get('dnsSettings', {}).get('fqdn')
@@ -636,6 +724,7 @@ class AzureHost(object):
         new_hostvars['image'] = {}
         new_hostvars['os_disk'] = {}
         new_hostvars['data_disks'] = []
+
         storageProfile = self._vm_model['properties'].get('storageProfile')
         if storageProfile:
             imageReference = storageProfile.get('imageReference')
@@ -674,29 +763,43 @@ class AzureHost(object):
         self._powerstate = next((self._powerstate_regex.match(s.get('code', '')).group('powerstate')
                                  for s in vm_instanceview_model.get('statuses', []) if self._powerstate_regex.match(s.get('code', ''))), 'unknown')
 
-    def _on_nic_response(self, nic_model, is_primary=False):
-        nic = AzureNic(nic_model=nic_model, inventory_client=self._inventory_client, is_primary=is_primary)
+    def _on_nic_response(self, nic_model, is_primary=False, public_ips={}):
+        nic = AzureNic(nic_model=nic_model, inventory_client=self._inventory_client, is_primary=is_primary, public_ips=public_ips, vmss=self._vmss)
         self.nics.append(nic)
 
 
 class AzureNic(object):
-    def __init__(self, nic_model, inventory_client, is_primary=False):
+    def __init__(self, nic_model, inventory_client, is_primary=False, public_ips={}, vmss=None):
         self._nic_model = nic_model
         self.is_primary = is_primary
         self._inventory_client = inventory_client
+        self._vmss = vmss
 
-        self.public_ips = {}
+        self.public_ips = public_ips
 
         if nic_model.get('properties', {}).get('ipConfigurations'):
             for ipc in nic_model['properties']['ipConfigurations']:
                 pip = ipc['properties'].get('publicIPAddress')
-                if pip:
+                if pip and pip['id'] not in self.public_ips:
                     self._inventory_client._enqueue_get(url=pip['id'], api_version=self._inventory_client._network_api_version, handler=self._on_pip_response)
+        if self._vmss:
+            if f"{nic_model['id']}/ipConfigurations/{nic_model['name']}-defaultIpConfiguration/publicIPAddresses/publicIp-{nic_model['name']}" not in self.public_ips: 
+                self._inventory_client._enqueue_get(
+                        url=f"{nic_model['id']}/ipConfigurations/{nic_model['name']}-defaultIpConfiguration/publicIPAddresses/publicIp-{nic_model['name']}",
+                        api_version='2021-11-01', handler=self._on_pip_vmss_response
+                    )
 
     def _on_pip_response(self, pip_model):
+        self.public_ips[pip_model['id']] = AzurePip(pip_model)
+
+    def _on_pip_vmss_response(self, pip_model):
         self.public_ips[pip_model['id']] = AzurePip(pip_model)
 
 
 class AzurePip(object):
     def __init__(self, pip_model):
         self._pip_model = pip_model
+
+    # def toJson(self):
+    #     return json.dumps(self, default=lambda o: o.__dict__)
+ 
