@@ -101,7 +101,7 @@ AZURE_API_PROFILES = {
         'NetworkManagementClient': '2019-06-01',
         'ResourceManagementClient': '2017-05-10',
         'SearchManagementClient': '2020-08-01',
-        'StorageManagementClient': '2019-06-01',
+        'StorageManagementClient': '2021-06-01',
         'SubscriptionClient': '2019-11-01',
         'WebSiteManagementClient': '2018-02-01',
         'PostgreSQLManagementClient': '2017-12-01',
@@ -229,15 +229,10 @@ try:
     from msrestazure.azure_active_directory import AADTokenCredentials
     from msrestazure.azure_exceptions import CloudError
     from msrestazure.azure_active_directory import MSIAuthentication
+    from azure.cli.core.auth.adal_authentication import MSIAuthenticationWrapper
     from msrestazure.tools import parse_resource_id, resource_id, is_valid_resource_id
     from msrestazure import azure_cloud
     from azure.common.credentials import ServicePrincipalCredentials, UserPassCredentials
-    from azure.mgmt.network.version import VERSION as network_client_version
-    from azure.mgmt.storage.version import VERSION as storage_client_version
-    from azure.mgmt.compute.version import VERSION as compute_client_version
-    from azure.mgmt.resource.version import VERSION as resource_client_version
-    from azure.mgmt.dns.version import VERSION as dns_client_version
-    from azure.mgmt.web.version import VERSION as web_client_version
     from azure.mgmt.network import NetworkManagementClient
     from azure.mgmt.resource.resources import ResourceManagementClient
     from azure.mgmt.managementgroups import ManagementGroupsAPI as ManagementGroupsClient
@@ -281,6 +276,8 @@ try:
     import azure.mgmt.datalake.store.models as DataLakeStoreAccountModel
     from azure.mgmt.notificationhubs import NotificationHubsManagementClient
     from azure.mgmt.eventhub import EventHubManagementClient
+    from azure.mgmt.datafactory import DataFactoryManagementClient
+    import azure.mgmt.datafactory.models as DataFactoryModel
     from azure.identity._credentials import client_secret, user_password
 
 except ImportError as exc:
@@ -335,7 +332,7 @@ def normalize_location_name(name):
 AZURE_PKG_VERSIONS = {
     'StorageManagementClient': {
         'package_name': 'storage',
-        'expected_version': '11.1.0'
+        'expected_version': '19.0.0'
     },
     'ComputeManagementClient': {
         'package_name': 'compute',
@@ -452,6 +449,7 @@ class AzureRMModuleBase(object):
         self._recovery_services_backup_client = None
         self._search_client = None
         self._datalake_store_client = None
+        self._datafactory_client = None
         self._notification_hub_client = None
         self._event_hub_client = None
 
@@ -741,7 +739,7 @@ class AzureRMModuleBase(object):
         )
         self.log('Creating default public IP {0}'.format(public_ip_name))
         try:
-            poller = self.network_client.public_ip_addresses.create_or_update(resource_group, public_ip_name, params)
+            poller = self.network_client.public_ip_addresses.begin_create_or_update(resource_group, public_ip_name, params)
         except Exception as exc:
             self.fail("Error creating {0} - {1}".format(public_ip_name, str(exc)))
 
@@ -839,9 +837,9 @@ class AzureRMModuleBase(object):
 
         self.log('Creating default security group {0}'.format(security_group_name))
         try:
-            poller = self.network_client.network_security_groups.create_or_update(resource_group,
-                                                                                  security_group_name,
-                                                                                  parameters)
+            poller = self.network_client.network_security_groups.begin_create_or_update(resource_group,
+                                                                                        security_group_name,
+                                                                                        parameters)
         except Exception as exc:
             self.fail("Error creating default security rule {0} - {1}".format(security_group_name, str(exc)))
 
@@ -1006,12 +1004,13 @@ class AzureRMModuleBase(object):
         if not self._storage_client:
             self._storage_client = self.get_mgmt_svc_client(StorageManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
-                                                            api_version='2019-06-01')
+                                                            is_track2=True,
+                                                            api_version='2021-06-01')
         return self._storage_client
 
     @property
     def storage_models(self):
-        return StorageManagementClient.models("2019-06-01")
+        return StorageManagementClient.models("2021-06-01")
 
     @property
     def authorization_client(self):
@@ -1056,13 +1055,14 @@ class AzureRMModuleBase(object):
         if not self._network_client:
             self._network_client = self.get_mgmt_svc_client(NetworkManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
-                                                            api_version='2020-06-01')
+                                                            is_track2=True,
+                                                            api_version='2021-03-01')
         return self._network_client
 
     @property
     def network_models(self):
         self.log("Getting network models...")
-        return NetworkManagementClient.models("2020-06-01")
+        return NetworkManagementClient.models("2021-03-01")
 
     @property
     def rm_client(self):
@@ -1084,13 +1084,14 @@ class AzureRMModuleBase(object):
         if not self._image_client:
             self._image_client = self.get_mgmt_svc_client(ComputeManagementClient,
                                                           base_url=self._cloud_environment.endpoints.resource_manager,
-                                                          api_version='2018-06-01')
+                                                          is_track2=True,
+                                                          api_version='2021-04-01')
         return self._image_client
 
     @property
     def image_models(self):
         self.log("Getting compute image models")
-        return ComputeManagementClient.models("2018-06-01")
+        return ComputeManagementClient.models("2021-04-01")
 
     @property
     def compute_client(self):
@@ -1098,13 +1099,14 @@ class AzureRMModuleBase(object):
         if not self._compute_client:
             self._compute_client = self.get_mgmt_svc_client(ComputeManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager,
-                                                            api_version='2019-07-01')
+                                                            is_track2=True,
+                                                            api_version='2021-04-01')
         return self._compute_client
 
     @property
     def compute_models(self):
         self.log("Getting compute models")
-        return ComputeManagementClient.models("2019-07-01")
+        return ComputeManagementClient.models("2021-04-01")
 
     @property
     def dns_client(self):
@@ -1171,7 +1173,8 @@ class AzureRMModuleBase(object):
         self.log('Getting SQL client')
         if not self._sql_client:
             self._sql_client = self.get_mgmt_svc_client(SqlManagementClient,
-                                                        base_url=self._cloud_environment.endpoints.resource_manager)
+                                                        base_url=self._cloud_environment.endpoints.resource_manager,
+                                                        is_track2=True)
         return self._sql_client
 
     @property
@@ -1197,14 +1200,6 @@ class AzureRMModuleBase(object):
             self._mariadb_client = self.get_mgmt_svc_client(MariaDBManagementClient,
                                                             base_url=self._cloud_environment.endpoints.resource_manager)
         return self._mariadb_client
-
-    @property
-    def sql_client(self):
-        self.log('Getting SQL client')
-        if not self._sql_client:
-            self._sql_client = self.get_mgmt_svc_client(SqlManagementClient,
-                                                        base_url=self._cloud_environment.endpoints.resource_manager)
-        return self._sql_client
 
     @property
     def containerregistry_client(self):
@@ -1302,7 +1297,8 @@ class AzureRMModuleBase(object):
         self.log('Getting automation client')
         if not self._automation_client:
             self._automation_client = self.get_mgmt_svc_client(AutomationClient,
-                                                               base_url=self._cloud_environment.endpoints.resource_manager)
+                                                               base_url=self._cloud_environment.endpoints.resource_manager,
+                                                               is_track2=True)
         return self._automation_client
 
     @property
@@ -1320,18 +1316,6 @@ class AzureRMModuleBase(object):
     @property
     def IoThub_models(self):
         return IoTHubModels
-
-    @property
-    def automation_client(self):
-        self.log('Getting automation client')
-        if not self._automation_client:
-            self._automation_client = self.get_mgmt_svc_client(AutomationClient,
-                                                               base_url=self._cloud_environment.endpoints.resource_manager)
-        return self._automation_client
-
-    @property
-    def automation_models(self):
-        return AutomationModel
 
     @property
     def lock_client(self):
@@ -1400,6 +1384,19 @@ class AzureRMModuleBase(object):
                 base_url=self._cloud_environment.endpoints.resource_manager,
                 api_version='2018-05-04')
         return self._event_hub_client
+
+    @property
+    def datafactory_client(self):
+        self.log('Getting datafactory client...')
+        if not self._datafactory_client:
+            self._datafactory_client = self.get_mgmt_svc_client(DataFactoryManagementClient,
+                                                                is_track2=True,
+                                                                base_url=self._cloud_environment.endpoints.resource_manager)
+        return self._datafactory_client
+
+    @property
+    def datafactory_model(self):
+        return DataFactoryModel
 
 
 class AzureSASAuthentication(Authentication):
@@ -1503,10 +1500,14 @@ class AzureRMAuth(object):
         else:
             self._adfs_authority_url = self.credentials.get('adfs_authority_url')
 
-        if self.credentials.get('credentials') is not None:
-            # AzureCLI credentials
+        if self.credentials.get('auth_source') == 'msi':
+            # MSI Credentials
             self.azure_credentials = self.credentials['credentials']
             self.azure_credential_track2 = self.credentials['credential']
+        elif self.credentials.get('credentials') is not None:
+            # AzureCLI credentials
+            self.azure_credentials = self.credentials['credentials']
+            self.azure_credential_track2 = self.credentials['credentials']
         elif self.credentials.get('client_id') is not None and \
                 self.credentials.get('secret') is not None and \
                 self.credentials.get('tenant') is not None:
@@ -1592,6 +1593,7 @@ class AzureRMAuth(object):
 
     def _get_msi_credentials(self, subscription_id=None, client_id=None, **kwargs):
         credentials = MSIAuthentication(client_id=client_id)
+        credential = MSIAuthenticationWrapper(client_id=client_id)
         subscription_id = subscription_id or self._get_env('subscription_id')
         if not subscription_id:
             try:
@@ -1604,7 +1606,9 @@ class AzureRMAuth(object):
                           "Please check whether your machine enabled MSI or grant access to any subscription.".format(str(exc)))
         return {
             'credentials': credentials,
-            'subscription_id': subscription_id
+            'credential': credential,
+            'subscription_id': subscription_id,
+            'auth_source': 'msi'
         }
 
     def _get_azure_cli_credentials(self, subscription_id=None, resource=None):
@@ -1622,7 +1626,6 @@ class AzureRMAuth(object):
 
         cli_credentials = {
             'credentials': credentials,
-            'credential': credentials,
             'subscription_id': subscription_id,
             'cloud_environment': cloud_environment
         }

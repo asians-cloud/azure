@@ -32,6 +32,8 @@ options:
     tags:
         description:
             - Limit results by providing a list of tags. Format tags as 'key' or 'key:value'.
+        type: list
+        elements: str
     show_connection_string:
         description:
             - Show the connection string for each of the storageaccount's endpoints.
@@ -401,7 +403,7 @@ storageaccounts:
 '''
 
 try:
-    from msrestazure.azure_exceptions import CloudError
+    from azure.core.exceptions import ResourceNotFoundError
 except Exception:
     # This is handled in azure_rm_common
     pass
@@ -419,7 +421,7 @@ class AzureRMStorageAccountInfo(AzureRMModuleBase):
         self.module_arg_spec = dict(
             name=dict(type='str'),
             resource_group=dict(type='str', aliases=['resource_group_name']),
-            tags=dict(type='list'),
+            tags=dict(type='list', elements='str'),
             show_connection_string=dict(type='bool'),
             show_blob_cors=dict(type='bool')
         )
@@ -475,7 +477,7 @@ class AzureRMStorageAccountInfo(AzureRMModuleBase):
         try:
             account = self.storage_client.storage_accounts.get_properties(self.resource_group, self.name)
             return [account]
-        except CloudError:
+        except ResourceNotFoundError:
             pass
         return []
 

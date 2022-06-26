@@ -84,7 +84,7 @@ try:
     import codecs
     from azure.keyvault import KeyVaultClient, KeyVaultId, KeyVaultAuthentication
     from azure.keyvault.models import KeyAttributes, JsonWebKey
-    from azure.common.credentials import ServicePrincipalCredentials
+    from azure.common.credentials import ServicePrincipalCredentials, get_cli_profile
     from azure.keyvault.models.key_vault_error import KeyVaultErrorException
     from msrestazure.azure_active_directory import MSIAuthentication
     from OpenSSL import crypto
@@ -185,6 +185,15 @@ class AzureRMKeyVaultKey(AzureRMModuleBase):
                 return KeyVaultClient(credentials)
             except Exception:
                 self.log("Get KeyVaultClient from service principal")
+        elif self.module.params['auth_source'] in ['auto', 'cli']:
+            try:
+                profile = get_cli_profile()
+                credentials, subscription_id, tenant = profile.get_login_credentials(
+                    subscription_id=self.credentials['subscription_id'], resource="https://vault.azure.net")
+                return KeyVaultClient(credentials)
+            except Exception as exc:
+                self.log("Get KeyVaultClient from service principal")
+                # self.fail("Failed to load CLI profile {0}.".format(str(exc)))
 
         # Create KeyVault Client using KeyVault auth class and auth_callback
         def auth_callback(server, resource, scope):

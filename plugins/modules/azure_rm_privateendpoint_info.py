@@ -28,9 +28,14 @@ options:
         description:
             - Limit results by resource group.
         type: str
+    tags:
+        description:
+            - Limit results by providing a list of tags. Format tags as 'key' or 'key:value'.
+        type: list
+        elements: str
+
 extends_documentation_fragment:
     - azure.azcollection.azure
-    - azure.azcollection.azure_tags
 
 author:
     - Fred-sun (@Fred-sun)
@@ -49,7 +54,7 @@ EXAMPLES = '''
     - name: Get all private endpoint under subscription
       azure_rm_virtualnetwork_info:
         tags:
-          key1: value1
+          - key1:value1
 '''
 
 RETURN = '''
@@ -122,7 +127,7 @@ state:
 '''
 
 try:
-    from msrestazure.azure_exceptions import CloudError
+    from azure.core.exceptions import ResourceNotFoundError
 except Exception:
     # This is handled in azure_rm_common
     pass
@@ -137,6 +142,7 @@ class AzureRMPrivateEndpointInfo(AzureRMModuleBase):
         self.module_arg_spec = dict(
             name=dict(type='str'),
             resource_group=dict(type='str'),
+            tags=dict(type='list', elements='str')
         )
 
         self.results = dict(
@@ -153,7 +159,7 @@ class AzureRMPrivateEndpointInfo(AzureRMModuleBase):
 
         super(AzureRMPrivateEndpointInfo, self).__init__(self.module_arg_spec,
                                                          supports_check_mode=True,
-                                                         supports_tags=True,
+                                                         supports_tags=False,
                                                          facts_module=True)
 
     def exec_module(self, **kwargs):
@@ -176,7 +182,7 @@ class AzureRMPrivateEndpointInfo(AzureRMModuleBase):
 
         try:
             item = self.network_client.private_endpoints.get(self.resource_group, self.name)
-        except Exception:
+        except ResourceNotFoundError:
             self.log('Could not get info for @(Model.ModuleOperationNameUpper).')
         format_item = self.privateendpoints_to_dict(item)
 
@@ -188,7 +194,7 @@ class AzureRMPrivateEndpointInfo(AzureRMModuleBase):
         self.log('List items for resource group')
         try:
             response = self.network_client.private_endpoints.list(self.resource_group)
-        except CloudError as exc:
+        except ResourceNotFoundError as exc:
             self.fail("Failed to list for resource group {0} - {1}".format(self.resource_group, str(exc)))
 
         results = []
@@ -202,7 +208,7 @@ class AzureRMPrivateEndpointInfo(AzureRMModuleBase):
         self.log('List all for items')
         try:
             response = self.network_client.private_endpoints.list_by_subscription()
-        except CloudError as exc:
+        except ResourceNotFoundError as exc:
             self.fail("Failed to list all items - {0}".format(str(exc)))
 
         results = []

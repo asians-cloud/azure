@@ -26,6 +26,8 @@ options:
     tags:
         description:
             - Limit results by providing a list of tags. Format tags as 'key' or 'key:value'.
+        type: list
+        elements: str
     retrieve_keys:
         description:
             - Retrieve keys and connection strings.
@@ -55,6 +57,9 @@ EXAMPLES = '''
   - name: List instances of Database Account
     azure_rm_cosmosdbaccount_info:
       resource_group: myResourceGroup
+      tags:
+        - key
+        - key:value
 '''
 
 RETURN = '''
@@ -220,12 +225,27 @@ accounts:
             returned: always
             type: str
             sample: Standard
+        enable_free_tier:
+            description:
+                - If enabled the account is free-tier.
+            returned: always
+            type: bool
+            sample: true
+            version_added: "1.10.0"
         ip_range_filter:
             description:
-                - Enable IP range filter.
+                - (deprecated) Enabled IP range filter.
+                - This value has been deprecated, and will be removed in a later version. Use c(ip_rules) instead.
             returned: always
             type: str
             sample: 10.10.10.10
+        ip_rules:
+            description:
+                - The IP addresses or IP address ranges in CIDR form included as the allowed list of client IPs.
+            returned: always
+            type: list
+            sample: ["10.10.10.10", "20.20.20.20/28"]
+            version_added: "1.10.0"
         is_virtual_network_filter_enabled:
             description:
                 - Enable virtual network filter.
@@ -256,6 +276,21 @@ accounts:
             returned: always
             type: bool
             sample: true
+        mongo_version:
+            description:
+                - Server version for the MongoDB account.
+                - Only used for c(kind) = i(mongo_db); otherwise value is null/none.
+            returned: always
+            type: str
+            sample: "4.0"
+            version_added: "1.10.0"
+        public_network_access:
+            description:
+                - If public network access is allowed to the server.
+            returned: always
+            type: str
+            sample: Enabled
+            version_added: "1.10.0"
         virtual_network_rules:
             description:
                 - List of Virtual Network ACL rules configured for the Cosmos DB account.
@@ -344,8 +379,7 @@ from ansible.module_utils.common.dict_transformations import _camel_to_snake
 
 try:
     from msrestazure.azure_exceptions import CloudError
-    from azure.mgmt.cosmosdb import CosmosDB
-    from msrest.serialization import Model
+    from azure.mgmt.cosmosdb import CosmosDBManagementClient
 except ImportError:
     # This is handled in azure_rm_common
     pass
@@ -362,7 +396,8 @@ class AzureRMCosmosDBAccountInfo(AzureRMModuleBase):
                 type='str'
             ),
             tags=dict(
-                type='list'
+                type='list',
+                elements='str'
             ),
             retrieve_keys=dict(
                 type='str',
@@ -383,7 +418,7 @@ class AzureRMCosmosDBAccountInfo(AzureRMModuleBase):
         self.retrieve_keys = None
         self.retrieve_connection_strings = None
 
-        super(AzureRMCosmosDBAccountInfo, self).__init__(self.module_arg_spec, supports_check_mode=True, supports_tags=False)
+        super(AzureRMCosmosDBAccountInfo, self).__init__(self.module_arg_spec, supports_check_mode=True, supports_tags=False, facts_module=True)
 
     def exec_module(self, **kwargs):
 
@@ -393,7 +428,7 @@ class AzureRMCosmosDBAccountInfo(AzureRMModuleBase):
 
         for key in self.module_arg_spec:
             setattr(self, key, kwargs[key])
-        self.mgmt_client = self.get_mgmt_svc_client(CosmosDB,
+        self.mgmt_client = self.get_mgmt_svc_client(CosmosDBManagementClient,
                                                     base_url=self._cloud_environment.endpoints.resource_manager)
 
         if self.name is not None:
@@ -476,12 +511,16 @@ class AzureRMCosmosDBAccountInfo(AzureRMModuleBase):
                                  'document_endpoint': wl['document_endpoint'],
                                  'provisioning_state': wl['provisioning_state']} for wl in d['write_locations']],
             'database_account_offer_type': d.get('database_account_offer_type'),
-            'ip_range_filter': d['ip_range_filter'],
+            'enable_free_tier': d.get('enable_free_tier'),
+            'ip_rules': [ip['ip_address_or_range'] for ip in d.get('ip_rules', [])],
+            'ip_range_filter': ",".join([ip['ip_address_or_range'] for ip in d.get('ip_rules', [])]),
             'is_virtual_network_filter_enabled': d.get('is_virtual_network_filter_enabled'),
             'enable_automatic_failover': d.get('enable_automatic_failover'),
             'enable_cassandra': 'EnableCassandra' in d.get('capabilities', []),
             'enable_table': 'EnableTable' in d.get('capabilities', []),
             'enable_gremlin': 'EnableGremlin' in d.get('capabilities', []),
+            'mongo_version': d.get('api_properties', {}).get('server_version'),
+            'public_network_access': d.get('public_network_access'),
             'virtual_network_rules': d.get('virtual_network_rules'),
             'enable_multiple_write_locations': d.get('enable_multiple_write_locations'),
             'document_endpoint': d.get('document_endpoint'),

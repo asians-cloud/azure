@@ -41,7 +41,8 @@ options:
     tags:
         description:
             - Limit results by providing a list of tags. Format tags as 'key' or 'key:value'.
-        type: dict
+        type: list
+        elements: str
 
 extends_documentation_fragment:
     - azure.azcollection.azure
@@ -162,7 +163,7 @@ from ansible_collections.azure.azcollection.plugins.module_utils.azure_rm_common
 
 try:
     from azure.keyvault import KeyVaultClient, KeyVaultId, KeyVaultAuthentication
-    from azure.common.credentials import ServicePrincipalCredentials
+    from azure.common.credentials import ServicePrincipalCredentials, get_cli_profile
     from azure.keyvault.models.key_vault_error import KeyVaultErrorException
     from msrestazure.azure_active_directory import MSIAuthentication
 except ImportError:
@@ -222,7 +223,7 @@ class AzureRMKeyVaultSecretInfo(AzureRMModuleBase):
                                     vault_uri=dict(type='str', required=True),
                                     show_deleted_secret=dict(type='bool',
                                                              default=False),
-                                    tags=dict(type='dict'))
+                                    tags=dict(type='list', elements='str'))
 
         self.vault_uri = None
         self.name = None
@@ -236,7 +237,8 @@ class AzureRMKeyVaultSecretInfo(AzureRMModuleBase):
         super(AzureRMKeyVaultSecretInfo,
               self).__init__(derived_arg_spec=self.module_arg_spec,
                              supports_check_mode=True,
-                             supports_tags=False)
+                             supports_tags=False,
+                             facts_module=True)
 
     def exec_module(self, **kwargs):
         """Main module execution method"""
@@ -273,6 +275,15 @@ class AzureRMKeyVaultSecretInfo(AzureRMModuleBase):
                 return KeyVaultClient(credentials)
             except Exception:
                 self.log("Get KeyVaultClient from service principal")
+        elif self.module.params['auth_source'] in ['auto', 'cli']:
+            try:
+                profile = get_cli_profile()
+                credentials, subscription_id, tenant = profile.get_login_credentials(
+                    subscription_id=self.credentials['subscription_id'], resource="https://vault.azure.net")
+                return KeyVaultClient(credentials)
+            except Exception as exc:
+                self.log("Get KeyVaultClient from service principal")
+                # self.fail("Failed to load CLI profile {0}.".format(str(exc)))
 
         # Create KeyVault Client using KeyVault auth class and auth_callback
         def auth_callback(server, resource, scope):

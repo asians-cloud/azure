@@ -7,6 +7,8 @@ parameters:
     - "2.7"
     - "3.6"
     - "3.8"
+    - "3.9"
+    - "3.10"
 - name: ANSIBLE_VER
   displayName: 'Ansible Version'
   type: string
@@ -33,6 +35,7 @@ parameters:
     - "azure_rm_appgateway"
     - "azure_rm_appserviceplan"
     - "azure_rm_automationaccount"
+    - "azure_rm_automationrunbook"
     - "azure_rm_autoscale"
     - "azure_rm_availabilityset"
     - "azure_rm_azurefirewall"
@@ -116,6 +119,7 @@ parameters:
     - "azure_rm_webappvnetconnection"
     - "azure_rm_webappaccessrestriction"
     - "azure_rm_workspace"
+    - "azure_rm_datafactory"
     - "inventory_azure"
     - "setup_azure"
 
@@ -150,7 +154,7 @@ jobs:
 
   - job: RunTests
     dependsOn: CreateResourceGroups
-    timeoutInMinutes: 90
+    timeoutInMinutes: 120
     variables:
       TEST_RESOURCE_GROUP: $[ dependencies.CreateResourceGroups.outputs['setvar.resource_group'] ]
       TEST_RESOURCE_GROUP_SECONDARY: $[ dependencies.CreateResourceGroups.outputs['setvar.resource_group_secondary'] ]
